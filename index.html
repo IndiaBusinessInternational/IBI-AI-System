@@ -357,7 +357,7 @@ textarea,input,select{font-family:inherit;font-size:inherit;color:inherit}
         <b>IBI AI System</b>
         <span>Artificial Intelligence</span>
       </div>
-      <span class="ver-badge" id="verBadge">v1</span>
+      <span class="ver-badge" id="verBadge">v1.1</span>
     </div>
     <button class="new-chat-btn" id="newChatBtn">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -448,7 +448,7 @@ textarea,input,select{font-family:inherit;font-size:inherit;color:inherit}
    Direct browser → Anthropic API (streaming SSE), key kept in localStorage
    ===================================================================== */
 
-const APP_VERSION = 'v1';
+const APP_VERSION = 'v1.1';
 const LS_KEY   = 'ibi_ai_apikey';
 const LS_CONVS = 'ibi_ai_convs';
 const LS_MODEL = 'ibi_ai_model';
@@ -754,10 +754,20 @@ function scrollBottom(force){
 function buildApiMessages(conv){
   const msgs = conv.messages.slice(-HISTORY_LIMIT).map(m=>{
     if(m.role === 'user') return {role:'user', content: m.content};
-    // assistant: echo stored content blocks verbatim (thinking signatures preserved)
+    // Assistant: echo stored content blocks verbatim so thinking signatures survive.
+    // Two blocks must never be replayed: an empty text block, and a thinking block
+    // with no signature (produced when the user stops a stream mid-thought) — the
+    // API rejects an unsigned thinking block and the whole conversation would 400.
     const blocks = Array.isArray(m.content) ? m.content : [{type:'text', text:String(m.content||'')}];
-    const clean = blocks.filter(b=>!(b.type==='text' && !b.text)); // drop empty text blocks
-    return {role:'assistant', content: clean.length?clean:[{type:'text',text:'…'}]};
+    let clean = blocks.filter(b=>{
+      if(b.type === 'text') return !!b.text;
+      if(b.type === 'thinking') return !!b.signature;
+      if(b.type === 'redacted_thinking') return !!b.data;
+      return true;
+    });
+    // An assistant turn may not consist of thinking alone — it must end in text.
+    if(!clean.some(b=>b.type === 'text')) clean = [...clean, {type:'text', text:'…'}];
+    return {role:'assistant', content: clean};
   });
   // API requires the first message to be from the user
   while(msgs.length && msgs[0].role !== 'user') msgs.shift();
