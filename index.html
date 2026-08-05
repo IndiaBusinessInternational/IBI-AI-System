@@ -223,7 +223,7 @@ textarea,input,select{font-family:inherit;font-size:inherit;color:inherit}
     <div class="side-head">
       <div class="brand-mark"><svg viewBox="0 0 24 24" fill="white"><circle cx="5" cy="5" r="1.9"/><circle cx="12" cy="5" r="1.9"/><circle cx="19" cy="5" r="1.9"/><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/><circle cx="5" cy="19" r="1.9"/><circle cx="12" cy="19" r="1.9"/><circle cx="19" cy="19" r="1.9"/></svg></div>
       <div class="brand-txt"><b>IBI AI System</b><span>Artificial Intelligence</span></div>
-      <span class="ver-badge" id="verBadge" title="Version">v2</span>
+      <span class="ver-badge" id="verBadge" title="Version">v3.0</span>
     </div>
     <button class="new-chat-btn" id="newChatBtn">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -316,6 +316,8 @@ textarea,input,select{font-family:inherit;font-size:inherit;color:inherit}
    NOTE ON CONCEALMENT: this hides vendor names from the *interface*, not
    from the network. The browser still connects to the vendor host, which
    is visible in devtools. Only a server-side relay can truly hide it.
+   The `local` provider is the one exception: there is no vendor host and
+   no credential, because the request never leaves the machine.
    ===================================================================== */
 
 /* ---- vendor adapters -------------------------------------------------
@@ -327,6 +329,14 @@ textarea,input,select{font-family:inherit;font-size:inherit;color:inherit}
      parse     (event, sink) -> feed deltas into the sink
    `history` is the neutral form: [{role:'user'|'assistant', text, blocks?}]
    -------------------------------------------------------------------- */
+
+/* Address of the on-device runtime. Stored per browser so a spare PC on
+   the LAN can host it instead; trailing slashes are trimmed so the
+   endpoint never builds a double-slash path. */
+const DEFAULT_LOCAL_URL = 'http://localhost:11434';
+const localBase = () =>
+  (localStorage.getItem('ibi_ai_local_url') || DEFAULT_LOCAL_URL).replace(/\/+$/, '');
+
 const PROVIDERS = {
 
   /* ---------------- Anthropic ---------------- */
@@ -426,6 +436,45 @@ const PROVIDERS = {
     }
   },
 
+  /* ---------------- On-device (OpenAI-shaped) ----------------
+     No vendor, no key, no network beyond this PC. The "credential"
+     for this provider is the address of the local runtime, which is
+     why it still uses the keyLS slot — the settings UI renders it as
+     a plain address field rather than a password.
+     The OpenAI-compatible path is used deliberately: it streams SSE
+     `data:` frames, which the existing reader already understands.
+     The native path streams bare NDJSON and would not parse. */
+  local: {
+    label: 'On-device runtime',
+    keyLS: 'ibi_ai_local_url',
+    keyHint: DEFAULT_LOCAL_URL,
+    isLocal: true,
+    console: 'https://ollama.com/download',
+    endpoint: () => localBase() + '/v1/chat/completions',
+    headers: () => ({'content-type': 'application/json'}),
+    body: ({model, system, history, maxTokens}) => ({
+      model, stream: true, stream_options: {include_usage: true},
+      max_tokens: maxTokens,
+      messages: [{role: 'system', content: system},
+                 ...history.map(m => ({role: m.role, content: m.text}))]
+    }),
+    parse: (ev, sink) => {
+      const d = ev.choices?.[0]?.delta;
+      if (d?.content) sink.text(d.content);
+      // The local runtime names this field `reasoning`, not the
+      // `reasoning_content` the hosted vendors use — verified against a
+      // live stream, both accepted so a runtime update can't break it.
+      // Do NOT try to switch thinking off here: asking the runtime to skip
+      // it only stops it *parsing* the think block, which dumps raw chain
+      // of thought and a stray closing tag into the visible answer.
+      const think = d?.reasoning ?? d?.reasoning_content;
+      if (think) sink.think(think);
+      const fin = ev.choices?.[0]?.finish_reason;
+      if (fin) sink.stop(fin === 'length' ? 'max_tokens' : fin);
+      if (ev.usage) sink.usage({out: ev.usage.completion_tokens});
+    }
+  },
+
   /* ---------------- Google Gemini ---------------- */
   gemini: {
     label: 'Google Gemini',
@@ -483,7 +532,13 @@ const ENGINES = [
   {id:'sage',    label:'IBI Sage',    tag:'alternate opinion', provider:'openai',    model:'gpt-5.6-sol'                      },
   {id:'swift',   label:'IBI Swift',   tag:'fast & very cheap', provider:'openai',    model:'gpt-5.6-luna'                     },
   {id:'rapid',   label:'IBI Rapid',   tag:'lowest cost',       provider:'deepseek',  model:'deepseek-v4-flash'                },
-  {id:'vision',  label:'IBI Vision',  tag:'images & long docs',provider:'gemini',    model:'gemini-3.6-flash'                 }
+  {id:'vision',  label:'IBI Vision',  tag:'images & long docs',provider:'gemini',    model:'gemini-3.6-flash'                 },
+  // Deliberately the *instruct* build, not the default thinking one: the
+  // thinking variant cannot be switched off (neither the API's effort knob
+  // nor the model's own soft switch is honoured) and spent 2,000 tokens and
+  // four minutes deliberating a one-line reply. This build answers the same
+  // prompt in five seconds.
+  {id:'local',   label:'IBI Local',   tag:'private, no cost',  provider:'local',     model:'qwen3:4b-instruct'                }
 ];
 
 const engineById = id => ENGINES.find(e => e.id === id) || ENGINES[0];
@@ -491,11 +546,11 @@ const engineById = id => ENGINES.find(e => e.id === id) || ENGINES[0];
 <script>
 'use strict';
 /* =====================================================================
-   IBI Artificial Intelligence System v2
+   IBI Artificial Intelligence System v3.0
    Multi-engine assistant · India Business International
    ===================================================================== */
 
-const APP_VERSION = 'v2';
+const APP_VERSION = 'v3.0';
 const LS_CONVS='ibi_ai_convs', LS_ENGINE='ibi_ai_engine', LS_INSTR='ibi_ai_instr', LS_CEO='ibi_ai_ceo';
 const LS_LEGACY_KEY = 'ibi_ai_apikey';        // v1 single-key slot
 const MAX_TOKENS = 16000;
@@ -546,7 +601,12 @@ function saveConvs(){
   }
 }
 const getConv = id => convs.find(c=>c.id===id);
-const keyFor = p => localStorage.getItem(PROVIDERS[p].keyLS) || '';
+/* The on-device provider has no credential to be missing — it falls back to
+   the default address, so it is never reported as locked. Whether it is
+   actually reachable is answered by the request itself. */
+const keyFor = p => PROVIDERS[p].isLocal
+  ? localBase()
+  : (localStorage.getItem(PROVIDERS[p].keyLS) || '');
 function currentEngine(){ return engineById(localStorage.getItem(LS_ENGINE)||'apex'); }
 
 /* ---------------- markdown ---------------- */
@@ -768,7 +828,7 @@ async function sendMessage(text){
         const j=await res.json();
         detail = (j && (j.error?.message || j.message || (Array.isArray(j)&&j[0]?.error?.message))) || '';
       }catch(_){}
-      throw new Error(httpMessage(res.status, detail));
+      throw new Error(httpMessage(res.status, detail, prov.isLocal));
     }
 
     const reader=res.body.getReader(), dec=new TextDecoder();
@@ -794,7 +854,11 @@ async function sendMessage(text){
     aMsg.text=liveText; aMsg.thinking=liveThink; aMsg.blocks=blocks.filter(Boolean);
     aMsg.error = err.name==='AbortError'
       ? '<b>Stopped</b>You stopped this reply.'
-      : '<b>Could not reach the engine</b>'+esc(err.message||'Unknown error');
+      // A local runtime that isn't listening fails as a network error, not
+      // an HTTP status, so it never reaches httpMessage above.
+      : (prov.isLocal && err.name==='TypeError')
+        ? '<b>The on-device engine is not running</b>Start it on this PC and send again. The other engines are unaffected.'
+        : '<b>Could not reach the engine</b>'+esc(err.message||'Unknown error');
   }finally{
     c.updated=Date.now(); saveConvs();
     setStreaming(false); abortCtrl=null;
@@ -803,10 +867,13 @@ async function sendMessage(text){
   }
 }
 
-function httpMessage(status, detail){
+function httpMessage(status, detail, isLocal){
   const d = detail ? ' — '+detail : '';
   if(status===401||status===403) return 'This engine rejected its access key (HTTP '+status+').'+d;
-  if(status===404) return 'This engine’s model name was not recognised (404).'+d;
+  // On-device, a 404 means the model was never downloaded, not a wrong name.
+  if(status===404) return isLocal
+    ? 'This engine’s model is not installed on this PC yet (404).'+d
+    : 'This engine’s model name was not recognised (404).'+d;
   if(status===429) return 'Rate limit or quota reached (429). Wait a moment, or switch engine.'+d;
   if(status>=500)  return 'The engine is temporarily unavailable (HTTP '+status+').'+d;
   return 'Request failed (HTTP '+status+').'+d;
@@ -903,15 +970,43 @@ function renderProviders(){
   $('provList').innerHTML = Object.keys(PROVIDERS).map(id=>{
     const p=PROVIDERS[id];
     const mine=ENGINES.filter(e=>e.provider===id);
+    // The on-device row holds an address, not a secret: shown as plain text,
+    // and its indicator reflects a live reachability probe rather than
+    // "is a value present", which would always be true.
     return `<div class="prov-row">
       <div class="ph">
-        <span class="pn"><span class="${keyFor(id)?'dot-ok':'dot-no'}"></span>${esc(p.label||id)}</span>
+        <span class="pn"><span class="${p.isLocal?'dot-no':(keyFor(id)?'dot-ok':'dot-no')}" id="dot-${id}"></span>${esc(p.label||id)}</span>
         <span class="pe">${esc(mine.map(e=>e.label).join(', '))}</span>
       </div>
-      <input type="password" data-prov="${id}" placeholder="${esc(p.keyHint)}" autocomplete="off" value="${esc(keyFor(id))}">
-      <div class="hint">${esc(mine.map(e=>e.model).join(' · '))} — <a href="${esc(p.console)}" target="_blank" rel="noopener">get a key</a></div>
+      <input type="${p.isLocal?'text':'password'}" data-prov="${id}" placeholder="${esc(p.keyHint)}" autocomplete="off" spellcheck="false" value="${esc(keyFor(id))}">
+      <div class="hint" id="hint-${id}">${esc(mine.map(e=>e.model).join(' · '))} — <a href="${esc(p.console)}" target="_blank" rel="noopener">${p.isLocal?'install the runtime':'get a key'}</a></div>
     </div>`;
   }).join('');
+  probeLocal();
+}
+
+/* Ask the local runtime whether it is listening, and say so plainly.
+   Failure here is expected and harmless — it just means "not running". */
+async function probeLocal(){
+  const dot=$('dot-local'), hint=$('hint-local');
+  if(!dot||!hint) return;
+  const base=localBase();
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), 3000);
+  try{
+    const r=await fetch(base+'/v1/models',{signal:ctrl.signal});
+    if(!r.ok) throw new Error('http '+r.status);
+    const j=await r.json();
+    const want=ENGINES.find(e=>e.provider==='local').model;
+    const has=(j.data||[]).some(m=>m.id===want||m.id===want+':latest'||m.id.split(':')[0]===want.split(':')[0]);
+    dot.className='dot-ok';
+    hint.textContent = has
+      ? 'Running on this device — no key, no cost, nothing leaves this PC.'
+      : 'Running, but the model is not downloaded on this device yet.';
+  }catch(_){
+    dot.className='dot-no';
+    hint.textContent='Not detected at this address. Start it on this PC, then reopen Settings.';
+  }finally{ clearTimeout(timer); }
 }
 function openSettings(){
   $('customInstr').value=localStorage.getItem(LS_INSTR)||'';
