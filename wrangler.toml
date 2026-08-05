@@ -1,0 +1,23 @@
+# Deployment config for the IBI AI System engine relay.
+#
+# The relay's job is to stand between the browser and every AI vendor, so
+# that vendor names, endpoints and credentials never reach the client. See
+# CLOUDFLARE-WORKER-SETUP.md for what it buys and how the secrets are set.
+#
+# No secrets live here. They are set with `wrangler secret put` (or in the
+# dashboard) and are never committed:
+#   ACCESS_CODE    required - the gate on the relay itself
+#   KEY_ANTHROPIC  IBI Apex, IBI Balance
+#   KEY_OPENAI     IBI Sage, IBI Swift
+#   KEY_DEEPSEEK   IBI Rapid
+#   KEY_GEMINI     IBI Vision
+# An engine whose key is absent reports itself as not ready rather than
+# failing oddly, so the relay is usable with only some vendors configured.
+
+name = "ibi-ai-relay"
+main = "cloudflare-worker.js"
+compatibility_date = "2026-08-05"
+
+# Streaming replies are the whole point; no smart placement games.
+[observability]
+enabled = true

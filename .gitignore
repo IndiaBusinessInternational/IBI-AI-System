@@ -3,3 +3,7 @@
 # public, and a published code is the same as no code at all.
 local-engine/access-code.txt
 local-engine/gateway.log
+
+# The relay's access code — same reasoning: it is the only thing stopping a
+# stranger who finds the Worker URL from spending your vendor credits.
+relay-access-code.txt
