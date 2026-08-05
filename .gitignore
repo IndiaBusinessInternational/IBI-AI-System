@@ -1,0 +1,5 @@
+# The gateway's access code is the only thing guarding the model runtime
+# from the public internet. It must never reach the repo — the repo is
+# public, and a published code is the same as no code at all.
+local-engine/access-code.txt
+local-engine/gateway.log

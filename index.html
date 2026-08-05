@@ -223,7 +223,7 @@ textarea,input,select{font-family:inherit;font-size:inherit;color:inherit}
     <div class="side-head">
       <div class="brand-mark"><svg viewBox="0 0 24 24" fill="white"><circle cx="5" cy="5" r="1.9"/><circle cx="12" cy="5" r="1.9"/><circle cx="19" cy="5" r="1.9"/><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/><circle cx="5" cy="19" r="1.9"/><circle cx="12" cy="19" r="1.9"/><circle cx="19" cy="19" r="1.9"/></svg></div>
       <div class="brand-txt"><b>IBI AI System</b><span>Artificial Intelligence</span></div>
-      <span class="ver-badge" id="verBadge" title="Version">v3.0</span>
+      <span class="ver-badge" id="verBadge" title="Version">v3.1</span>
     </div>
     <button class="new-chat-btn" id="newChatBtn">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -330,12 +330,23 @@ textarea,input,select{font-family:inherit;font-size:inherit;color:inherit}
    `history` is the neutral form: [{role:'user'|'assistant', text, blocks?}]
    -------------------------------------------------------------------- */
 
-/* Address of the on-device runtime. Stored per browser so a spare PC on
-   the LAN can host it instead; trailing slashes are trimmed so the
+/* Address of the on-device runtime. Stored per browser so a phone can point
+   at the laptop's gateway instead; trailing slashes are trimmed so the
    endpoint never builds a double-slash path. */
 const DEFAULT_LOCAL_URL = 'http://localhost:11434';
 const localBase = () =>
   (localStorage.getItem('ibi_ai_local_url') || DEFAULT_LOCAL_URL).replace(/\/+$/, '');
+
+/* Access code for reaching the runtime from off the machine. Empty when
+   talking straight to loopback, which needs no code — the code exists only
+   because a reachable-from-anywhere address would otherwise be an open
+   model runtime, and the runtime has no authentication of its own. */
+const localCode = () => localStorage.getItem('ibi_ai_local_code') || '';
+
+/* True when the address is not this machine. Used to tell "the runtime
+   isn't running here" apart from "the laptop hosting it is unreachable" —
+   two failures with the same network symptom and completely different fixes. */
+const localIsRemote = () => !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(localBase());
 
 const PROVIDERS = {
 
@@ -451,7 +462,14 @@ const PROVIDERS = {
     isLocal: true,
     console: 'https://ollama.com/download',
     endpoint: () => localBase() + '/v1/chat/completions',
-    headers: () => ({'content-type': 'application/json'}),
+    // The code is sent only when one is set, so the loopback case stays a
+    // plain unauthenticated call and needs no configuration at all.
+    headers: () => {
+      const h = {'content-type': 'application/json'};
+      const code = localCode();
+      if (code) h['x-ibi-access'] = code;
+      return h;
+    },
     body: ({model, system, history, maxTokens}) => ({
       model, stream: true, stream_options: {include_usage: true},
       max_tokens: maxTokens,
@@ -546,11 +564,11 @@ const engineById = id => ENGINES.find(e => e.id === id) || ENGINES[0];
 <script>
 'use strict';
 /* =====================================================================
-   IBI Artificial Intelligence System v3.0
+   IBI Artificial Intelligence System v3.1
    Multi-engine assistant · India Business International
    ===================================================================== */
 
-const APP_VERSION = 'v3.0';
+const APP_VERSION = 'v3.1';
 const LS_CONVS='ibi_ai_convs', LS_ENGINE='ibi_ai_engine', LS_INSTR='ibi_ai_instr', LS_CEO='ibi_ai_ceo';
 const LS_LEGACY_KEY = 'ibi_ai_apikey';        // v1 single-key slot
 const MAX_TOKENS = 16000;
@@ -855,9 +873,14 @@ async function sendMessage(text){
     aMsg.error = err.name==='AbortError'
       ? '<b>Stopped</b>You stopped this reply.'
       // A local runtime that isn't listening fails as a network error, not
-      // an HTTP status, so it never reaches httpMessage above.
+      // an HTTP status, so it never reaches httpMessage above. Remote and
+      // on-this-PC look identical here but need opposite fixes, so they must
+      // not share a message — "start it on this PC" sends someone on a phone
+      // to the wrong machine entirely.
       : (prov.isLocal && err.name==='TypeError')
-        ? '<b>The on-device engine is not running</b>Start it on this PC and send again. The other engines are unaffected.'
+        ? (localIsRemote()
+            ? '<b>Could not reach your machine</b>It may be asleep, switched off, or off the network. The other engines still work.'
+            : '<b>The on-device engine is not running</b>Start it on this PC and send again. The other engines are unaffected.')
         : '<b>Could not reach the engine</b>'+esc(err.message||'Unknown error');
   }finally{
     c.updated=Date.now(); saveConvs();
@@ -869,7 +892,9 @@ async function sendMessage(text){
 
 function httpMessage(status, detail, isLocal){
   const d = detail ? ' — '+detail : '';
-  if(status===401||status===403) return 'This engine rejected its access key (HTTP '+status+').'+d;
+  if(status===401||status===403) return isLocal
+    ? 'Your machine refused the access code (HTTP '+status+'). Check it in Settings.'+d
+    : 'This engine rejected its access key (HTTP '+status+').'+d;
   // On-device, a 404 means the model was never downloaded, not a wrong name.
   if(status===404) return isLocal
     ? 'This engine’s model is not installed on this PC yet (404).'+d
@@ -979,6 +1004,7 @@ function renderProviders(){
         <span class="pe">${esc(mine.map(e=>e.label).join(', '))}</span>
       </div>
       <input type="${p.isLocal?'text':'password'}" data-prov="${id}" placeholder="${esc(p.keyHint)}" autocomplete="off" spellcheck="false" value="${esc(keyFor(id))}">
+      ${p.isLocal ? `<input type="password" id="localCodeInput" placeholder="access code — only needed away from this PC" autocomplete="off" spellcheck="false" value="${esc(localCode())}" style="margin-top:6px">` : ''}
       <div class="hint" id="hint-${id}">${esc(mine.map(e=>e.model).join(' · '))} — <a href="${esc(p.console)}" target="_blank" rel="noopener">${p.isLocal?'install the runtime':'get a key'}</a></div>
     </div>`;
   }).join('');
@@ -990,22 +1016,34 @@ function renderProviders(){
 async function probeLocal(){
   const dot=$('dot-local'), hint=$('hint-local');
   if(!dot||!hint) return;
-  const base=localBase();
+  const base=localBase(), remote=localIsRemote();
   const ctrl=new AbortController();
-  const timer=setTimeout(()=>ctrl.abort(), 3000);
+  // A remote hop goes out to the internet and back, so allow it longer.
+  const timer=setTimeout(()=>ctrl.abort(), remote?8000:3000);
   try{
-    const r=await fetch(base+'/v1/models',{signal:ctrl.signal});
+    const r=await fetch(base+'/v1/models',{signal:ctrl.signal, headers:PROVIDERS.local.headers()});
+    // 401 is worth its own message: the address is right and something is
+    // listening, so telling the user it is "not detected" would be a lie.
+    if(r.status===401){
+      dot.className='dot-no';
+      hint.textContent='Reached it, but the access code is missing or wrong.';
+      return;
+    }
     if(!r.ok) throw new Error('http '+r.status);
     const j=await r.json();
     const want=ENGINES.find(e=>e.provider==='local').model;
     const has=(j.data||[]).some(m=>m.id===want||m.id===want+':latest'||m.id.split(':')[0]===want.split(':')[0]);
     dot.className='dot-ok';
     hint.textContent = has
-      ? 'Running on this device — no key, no cost, nothing leaves this PC.'
-      : 'Running, but the model is not downloaded on this device yet.';
+      ? (remote
+          ? 'Connected. The model runs on your own machine — no vendor, no cost.'
+          : 'Running on this device — no key, no cost, nothing leaves this PC.')
+      : 'Running, but that model is not downloaded on the machine hosting it.';
   }catch(_){
     dot.className='dot-no';
-    hint.textContent='Not detected at this address. Start it on this PC, then reopen Settings.';
+    hint.textContent = remote
+      ? 'No answer from that address. The machine hosting it may be asleep or offline.'
+      : 'Not detected at this address. Start it on this PC, then reopen Settings.';
   }finally{ clearTimeout(timer); }
 }
 function openSettings(){
@@ -1023,6 +1061,11 @@ $('saveSettingsBtn').addEventListener('click',()=>{
       const v=inp.value.trim(), slot=PROVIDERS[inp.dataset.prov].keyLS;
       if(v) localStorage.setItem(slot,v); else localStorage.removeItem(slot);
     });
+    const codeInp=$('localCodeInput');
+    if(codeInp){
+      const v=codeInp.value.trim();
+      if(v) localStorage.setItem('ibi_ai_local_code',v); else localStorage.removeItem('ibi_ai_local_code');
+    }
   }
   $('settingsModal').classList.remove('show');
   renderEngineSelect(); renderChat(); toast('Saved');
