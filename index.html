@@ -223,7 +223,7 @@ textarea,input,select{font-family:inherit;font-size:inherit;color:inherit}
     <div class="side-head">
       <div class="brand-mark"><svg viewBox="0 0 24 24" fill="white"><circle cx="5" cy="5" r="1.9"/><circle cx="12" cy="5" r="1.9"/><circle cx="19" cy="5" r="1.9"/><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/><circle cx="5" cy="19" r="1.9"/><circle cx="12" cy="19" r="1.9"/><circle cx="19" cy="19" r="1.9"/></svg></div>
       <div class="brand-txt"><b>IBI AI System</b><span>Artificial Intelligence</span></div>
-      <span class="ver-badge" id="verBadge" title="Version">v3.1</span>
+      <span class="ver-badge" id="verBadge" title="Version">v3.2</span>
     </div>
     <button class="new-chat-btn" id="newChatBtn">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -564,11 +564,11 @@ const engineById = id => ENGINES.find(e => e.id === id) || ENGINES[0];
 <script>
 'use strict';
 /* =====================================================================
-   IBI Artificial Intelligence System v3.1
+   IBI Artificial Intelligence System v3.2
    Multi-engine assistant · India Business International
    ===================================================================== */
 
-const APP_VERSION = 'v3.1';
+const APP_VERSION = 'v3.2';
 const LS_CONVS='ibi_ai_convs', LS_ENGINE='ibi_ai_engine', LS_INSTR='ibi_ai_instr', LS_CEO='ibi_ai_ceo';
 const LS_LEGACY_KEY = 'ibi_ai_apikey';        // v1 single-key slot
 const MAX_TOKENS = 16000;
@@ -900,7 +900,13 @@ function httpMessage(status, detail, isLocal){
     ? 'This engine’s model is not installed on this PC yet (404).'+d
     : 'This engine’s model name was not recognised (404).'+d;
   if(status===429) return 'Rate limit or quota reached (429). Wait a moment, or switch engine.'+d;
-  if(status>=500)  return 'The engine is temporarily unavailable (HTTP '+status+').'+d;
+  // On-device, a 5xx means the gateway answered but the runtime behind it
+  // did not — so the machine is awake and reachable, only the model is
+  // down. A supervisor restarts it within about fifteen seconds, which is
+  // why this says wait rather than sending someone to check settings.
+  if(status>=500)  return isLocal
+    ? 'Your machine is reachable but the model is not running (HTTP '+status+'). It restarts itself — wait a few seconds and send again.'+d
+    : 'The engine is temporarily unavailable (HTTP '+status+').'+d;
   return 'Request failed (HTTP '+status+').'+d;
 }
 

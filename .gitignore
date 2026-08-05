@@ -2,7 +2,13 @@
 # from the public internet. It must never reach the repo — the repo is
 # public, and a published code is the same as no code at all.
 local-engine/access-code.txt
+
+# Runtime logs. One file per process on purpose — the gateway holds its own
+# log open for as long as it runs, so a second writer appending to the same
+# file silently fails.
 local-engine/gateway.log
+local-engine/runtime.log
+local-engine/supervisor.log
 
 # The relay's access code — same reasoning: it is the only thing stopping a
 # stranger who finds the Worker URL from spending your vendor credits.
