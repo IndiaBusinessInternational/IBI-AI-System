@@ -50,8 +50,11 @@ to visit drive the model on this PC.
 **3. Download the model**
 
 ```bash
-ollama pull qwen3:4b-instruct
+ollama pull qwen3.5:4b
 ```
+
+One model, not two — it reads images as well as text. See *Why this exact
+model* below for why that matters more than its token rate.
 
 **4. Start it at login**
 
@@ -136,41 +139,81 @@ the hosted engines; they are unaffected.
 
 ## Why this exact model
 
-The default `qwen3:4b` is a *thinking* model, and its thinking cannot be turned
-off — the API's reasoning-effort switch only stops the runtime **parsing** the
-thought block, which dumps raw deliberation and a stray `</think>` tag into the
-visible answer, and the model's own `/no_think` instruction is ignored. Asked
-to reply with a single sentence, it produced **2,000 tokens over four minutes**
-and then answered correctly.
+`qwen3.5:4b` is chosen for one property that outranks its speed: **it reads
+images as well as text**, so the whole estate runs on a single model.
 
-`qwen3:4b-instruct` is the same model family without the thinking stage. Same
-prompt, **five seconds**. That is the only reason for the `-instruct` suffix in
-the engine roster, and it should not be dropped.
+That matters because the card holds 4 GB, which is exactly one model. A
+separate vision model is not *also* loaded — it evicts the text one. Measured
+here, every swap between two models cost **7–12 seconds**, and a photographed
+question triggers one in each direction. One model that does both removes that
+stall completely, and on the labels tested it transcribed *better* than the
+`gemma3:4b` it replaces, catching small print that gemma summarised past.
+
+### The thinking trap — read this before changing any model
+
+This model deliberates before answering, and left alone it spends the entire
+token budget doing so: `content` comes back **empty**, `finish_reason` is
+`length`, and the calling app displays nothing at all. It looks exactly like a
+broken engine.
+
+**The knob differs by endpoint, and the wrong one fails silently.** Measured on
+this PC, through `/v1/chat/completions`:
+
+| sent | content | reasoning |
+|---|---|---|
+| nothing | 0 chars | 611 |
+| `think: false` | 0 chars | 756 |
+| `chat_template_kwargs: {enable_thinking:false}` | 0 chars | 729 |
+| `reasoning_effort: "low"` | 0 chars | 664 |
+| **`reasoning_effort: "none"`** | **316 chars** | **0** |
+
+So: **`reasoning_effort:"none"` on `/v1/chat/completions`, `think:false` on the
+native `/api/chat`.** Each is ignored by the other endpoint without any error.
+The gateway applies the `/v1` one for everything that passes through it, so
+apps get working output for free — but a page talking to `:11434` **directly**
+(which the AI System does when you are sitting at this PC) bypasses the gateway
+and must send it itself.
+
+The older note here said thinking could not be turned off at all. That was true
+of `qwen3:4b` and is no longer true — but only via the exact knob above.
 
 ---
 
 ## Speed, honestly
 
-On the Quadro P2000 (4 GB) in this PC: **~13 tokens/second**, with about 69% of
-the model on the GPU and the rest on the CPU — the card is a little too small to
-hold all of it. A short listing or reply lands in a few seconds; a long document
-takes a minute or so.
+On the Quadro P2000 (4 GB) in this PC, measured:
+
+| | |
+|---|---|
+| Generation | **~9 tokens/second** |
+| On the GPU | about half; the rest runs on the CPU |
+| Cold load | **12.8 s** |
+| Warm reply | **0.8 s** |
+| Context | 8192 tokens |
+
+It is **slower than the `qwen3:4b-instruct` it replaces** (~15 tok/s), because
+at 3.4 GB less of it fits on the card. That is a deliberate trade: the lost
+speed is a few seconds per reply, while the model-swapping it eliminates cost
+7–12 seconds *per switch*, and there is no longer a second model to switch to.
+
+`OLLAMA_KEEP_ALIVE=-1` is what keeps the 0.8 s figure honest. Without it the
+runtime unloads after five idle minutes and the next request pays the full
+12.8 s — which reads as "the AI is broken" rather than "it is waking up".
 
 Two things were tried and made it *worse*, so don't reach for them: flash
-attention with a quantised KV cache dropped it to 10 tokens/second, because the
-P2000's generation lacks the hardware that makes those pay off.
+attention with a quantised KV cache dropped throughput, because the P2000's
+generation lacks the hardware that makes those pay off.
 
 ## What it is good at, and what it isn't
 
 Good: drafting listing copy, rewriting and shortening, summarising, classifying,
-translating, routine questions — the bulk of everyday use, at no cost and in
-complete privacy.
+translating, reading text out of a photograph, routine questions — the bulk of
+everyday use, at no cost and in complete privacy.
 
 Not good: hard reasoning, long documents, careful figure work. A 4-billion
 parameter model is not in the same class as IBI Apex, and no amount of
-configuration closes that gap. Keep the hosted engines for that work.
-
-**It cannot do images.** IBI Vision remains the engine for those.
+configuration closes that gap. Keep the hosted engines for that work — and
+never move tax or accounting figures onto it.
 
 ---
 

@@ -53,7 +53,36 @@ REM  listening rather than starting a duplicate.
 REM ---------------------------------------------------------------------
 
 set "OLLAMA_MODELS=D:\OllamaModels"
-set "OLLAMA_ORIGINS=https://ai.indiabusinessinternational.online,http://localhost,http://localhost:*,http://127.0.0.1,http://127.0.0.1:*"
+set "OLLAMA_ORIGINS=https://ai.indiabusinessinternational.online,https://*.indiabusinessinternational.online,http://localhost,http://localhost:*,http://127.0.0.1,http://127.0.0.1:*"
+
+REM ---------------------------------------------------------------------
+REM  SHARED-ENDPOINT TUNING. Measured on this PC (Quadro P2000, 4 GB), not
+REM  guessed - every number below has a stopwatch behind it.
+REM
+REM  KEEP_ALIVE=-1 keeps the model resident for good. The default unloads
+REM    it after 5 idle minutes, and reloading costs 12.8s against 0.8s warm.
+REM    With many apps calling in bursts the default means most of them pay
+REM    that 12.8s, which reads as "the AI is broken" rather than "it is
+REM    waking up". Costs ~3.7 GB held - affordable out of 32 GB.
+REM
+REM  MAX_LOADED_MODELS=1 because the card fits exactly one. Ollama would
+REM    otherwise try to keep several and evict constantly; a swap measured
+REM    7-12s EVERY time. One resident model is why the vision-capable model
+REM    is worth its lower token rate - there is nothing to swap to.
+REM
+REM  NUM_PARALLEL=1 because half this model already runs on the CPU. Serving
+REM    two requests at once does not double throughput here, it halves the
+REM    speed of both and makes latency unpredictable. Queue instead.
+REM
+REM  CONTEXT_LENGTH=8192 - the default 4096 is too short for the document
+REM    and lesson work these apps do. Every extra token of context is KV
+REM    cache competing with the model for the same 4 GB, so this is a
+REM    deliberate middle, not a maximum. Raise it and the GPU share drops.
+REM ---------------------------------------------------------------------
+set "OLLAMA_KEEP_ALIVE=-1"
+set "OLLAMA_MAX_LOADED_MODELS=1"
+set "OLLAMA_NUM_PARALLEL=1"
+set "OLLAMA_CONTEXT_LENGTH=8192"
 
 set "OLLAMA_EXE=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
 set "GATEWAY_JS=%~dp0local-gateway.js"
