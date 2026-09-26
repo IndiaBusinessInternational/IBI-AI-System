@@ -2,6 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- IBI-PWA-KIT: installable app (manifest + icons + service worker) -->
+<link rel="manifest" href="manifest.json" crossorigin="use-credentials">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="IBI AI">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<script>if('serviceWorker' in navigator)window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>IBI Artificial Intelligence System</title>
 <!-- Open Graph / social sharing -->
@@ -223,7 +232,7 @@ textarea,input,select{font-family:inherit;font-size:inherit;color:inherit}
     <div class="side-head">
       <div class="brand-mark"><svg viewBox="0 0 24 24" fill="white"><circle cx="5" cy="5" r="1.9"/><circle cx="12" cy="5" r="1.9"/><circle cx="19" cy="5" r="1.9"/><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/><circle cx="5" cy="19" r="1.9"/><circle cx="12" cy="19" r="1.9"/><circle cx="19" cy="19" r="1.9"/></svg></div>
       <div class="brand-txt"><b>IBI AI System</b><span>Artificial Intelligence</span></div>
-      <span class="ver-badge" id="verBadge" title="Version">v3.4</span>
+      <span class="ver-badge" id="verBadge" title="Version">v3.5</span>
     </div>
     <button class="new-chat-btn" id="newChatBtn">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -576,7 +585,7 @@ const engineById = id => ENGINES.find(e => e.id === id) || ENGINES[0];
    Multi-engine assistant · India Business International
    ===================================================================== */
 
-const APP_VERSION = 'v3.4';
+const APP_VERSION = 'v3.5';
 const LS_CONVS='ibi_ai_convs', LS_ENGINE='ibi_ai_engine', LS_INSTR='ibi_ai_instr', LS_CEO='ibi_ai_ceo';
 const LS_LEGACY_KEY = 'ibi_ai_apikey';        // v1 single-key slot
 const MAX_TOKENS = 16000;
