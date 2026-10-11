@@ -224,6 +224,23 @@ textarea,input,select{font-family:inherit;font-size:inherit;color:inherit}
 #sideOverlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:35;display:none}
 #sideOverlay.show{display:block}
 @media(min-width:801px){#sideOverlay{display:none!important}}
+/* v3.7 (CEO 11 Oct 2026, edge to edge on phones): the chat and the message box use the full screen width with 10px
+   inside (top bar 8px); the composer is a full-width bar; the page can never be wider than the screen. Fonts unchanged. */
+@media(max-width:640px){
+  html,body{overflow-x:clip}
+  #topbar{padding:0 8px}
+  #chat{padding:14px 10px 10px;gap:18px}
+  .msg-content,.err-note,.sug{overflow-wrap:anywhere}
+  .msg.user .msg-content{padding:10px 10px}
+  .err-note{padding:10px}
+  #welcome{padding:28px 10px}
+  .sug{padding:12px 10px}
+  #composerWrap{padding:6px 0 calc(8px + env(safe-area-inset-bottom))}
+  #composer{border-radius:0;border-left:0;border-right:0;box-shadow:none;padding:8px 8px 8px 10px}
+  .composer-note{padding:0 10px}
+  .modal-back{padding:8px}
+  .modal{padding:20px 10px}
+}
 </style>
 </head>
 <body>
@@ -232,7 +249,7 @@ textarea,input,select{font-family:inherit;font-size:inherit;color:inherit}
     <div class="side-head">
       <div class="brand-mark"><svg viewBox="0 0 24 24" fill="white"><circle cx="5" cy="5" r="1.9"/><circle cx="12" cy="5" r="1.9"/><circle cx="19" cy="5" r="1.9"/><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/><circle cx="5" cy="19" r="1.9"/><circle cx="12" cy="19" r="1.9"/><circle cx="19" cy="19" r="1.9"/></svg></div>
       <div class="brand-txt"><b>IBI AI System</b><span>Artificial Intelligence</span></div>
-      <span class="ver-badge" id="verBadge" title="Version">v3.6</span>
+      <span class="ver-badge" id="verBadge" title="Version">v3.7</span>
     </div>
     <button class="new-chat-btn" id="newChatBtn">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -581,11 +598,11 @@ const engineById = id => ENGINES.find(e => e.id === id) || ENGINES[0];
 <script>
 'use strict';
 /* =====================================================================
-   IBI Artificial Intelligence System v3.6
+   IBI Artificial Intelligence System v3.7
    Multi-engine assistant · India Business International
    ===================================================================== */
 
-const APP_VERSION = 'v3.6';
+const APP_VERSION = 'v3.7';
 const LS_CONVS='ibi_ai_convs', LS_ENGINE='ibi_ai_engine', LS_INSTR='ibi_ai_instr', LS_CEO='ibi_ai_ceo';
 const LS_LEGACY_KEY = 'ibi_ai_apikey';        // v1 single-key slot
 const MAX_TOKENS = 16000;
