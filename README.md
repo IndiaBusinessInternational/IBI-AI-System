@@ -1,6 +1,8 @@
-# IBI Artificial Intelligence System v3.7
+# IBI Artificial Intelligence System v3.8
 
 Multi-engine AI assistant of India Business International — live at https://ai.indiabusinessinternational.online/ (single-file `index.html`, GitHub Pages). Installable as an app (Chrome menu → Install app).
+
+**v3.8 (11 Oct 2026)** — Phone messages wrap long words with `break-word`; button and label text never splits mid-word.
 
 **v3.7 (11 Oct 2026)** — Phones run edge to edge: the chat, suggestions and message box use the full screen width with 10px side padding, and the page can never be wider than the screen. Tablets and desktop unchanged.
 
